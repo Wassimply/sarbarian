@@ -1,0 +1,1 @@
+alert('$i18n.get("hello.world")');
