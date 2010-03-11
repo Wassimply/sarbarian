@@ -1,14 +1,17 @@
 package org.jboss.resteasy.plugins.server.osgi.internal;
 
-import java.util.Hashtable;
-
 import javax.servlet.ServletContext;
+import javax.ws.rs.Path;
 
 import org.apache.log4j.Logger;
 import org.jboss.resteasy.plugins.server.osgi.IResteasyService;
 import org.osgi.framework.BundleActivator;
 import org.osgi.framework.BundleContext;
+import org.osgi.framework.InvalidSyntaxException;
+import org.osgi.framework.ServiceEvent;
+import org.osgi.framework.ServiceListener;
 import org.osgi.framework.ServiceReference;
+import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.http.HttpService;
 import org.osgi.util.tracker.ServiceTracker;
 
@@ -17,86 +20,141 @@ import org.osgi.util.tracker.ServiceTracker;
  * mapping and into OSGi services as service.
  * @author <a href="mailto:baldin@gmail.com">Davi Baldin H. Tavares</a> 
  */
-public class Activator implements BundleActivator {
+public class Activator implements BundleActivator, ServiceListener {
 
 	private static Logger log = Logger.getLogger(ResteasyService.class);
 	
 	private ServiceTracker httpServiceTracker;
-	private ServiceTracker osgiServiceTracker;
+	private ServiceRegistration sr;
+	
+	private IResteasyService service;
 	
 	private static String servletMapping = "";
 	private static ResteasyServlet bridge = null;
 	
-	@SuppressWarnings("unchecked")
+	private BundleContext context = null;
+	private String serviceFilter = null;
+	
 	public void start(BundleContext context) throws Exception {
-		log.info("Starting bundle " + context.getBundle().getSymbolicName() + " [" + context.getBundle().getVersion() + "]");
-		httpServiceTracker = new HttpServiceTracker(context);
+		this.context = context;
+		this.serviceFilter = "(objectclass=*)";
+		
+		httpServiceTracker = new ServiceTracker(context, HttpService.class.getName(), null);
 		httpServiceTracker.open();
-		log.info("Bundle started sucessfully");
+		HttpService httpService = (HttpService) httpServiceTracker.getService();
 		
-		log.info("Starting RESTEasy OSGi service");
-		IResteasyService service = new ResteasyService(bridge.getServletContext());
-		context.registerService(IResteasyService.SERVICE_NAME,service,new Hashtable());
+		try {
+			//TODO We need to get a reference to the ServletContext before starting RESTEasy
+			// however, the way I'm getting it seems odd.
+			ServletContextInterceptor interceptor = new ServletContextInterceptor();
+			httpService.registerServlet("/contextinterceptor", interceptor, null, null);
+			ServletContext servletContext = interceptor.getServletContext();
+							
+			log.info("Starting RESTEasy framework");
+			
+			//TODO Learn if annotation scanning can work inside bundles.
+			String scan = servletContext.getInitParameter("resteasy.scan");
+			if (scan != null && scan.equals("true")) {
+				log.error("Unsupported RESTEasy configuration into OSGi framework. Please remove it");
+			}
+			
+			servletMapping = servletContext.getInitParameter("resteasy.servlet.mapping.prefix");
+			bridge = new ResteasyServlet();
+			httpService.registerServlet(servletMapping, bridge, null, null);
+			log.info("RESTEasy Framework started on " + servletMapping);
+			
+			httpService.unregister("/contextinterceptor");
+			interceptor.destroy();
+			interceptor = null;
+		} catch (Exception e) {
+			throw e;
+		}
 		
-		osgiServiceTracker = new ServiceTracker(context, service.getClass().getName(), null);
-		osgiServiceTracker.open();
-		log.info("RESTEasy OSGi service started: " + ResteasyService.class.getName());
+		service = new ResteasyService(bridge.getServletContext());
+		sr = context.registerService(IResteasyService.SERVICE_NAME, service, null);
+		
+		try {
+			context.addServiceListener(this, serviceFilter);
+			ServiceReference[] srl = context.getServiceReferences(null, serviceFilter);
+			for(int i = 0; srl != null && i < srl.length; i++) {
+				addSingletons(context.getService(srl[i]));
+				context.ungetService(srl[i]);
+			}
+		} catch (InvalidSyntaxException e) { 
+			e.printStackTrace(); 
+		}		
 	}
 
 	public void stop(BundleContext context) throws Exception {
-		log.info("Stopping bundle " + context.getBundle().getSymbolicName() + " [" + context.getBundle().getVersion() + "]");
-		
-		osgiServiceTracker.close();
-		osgiServiceTracker = null;
-		
+		sr.unregister();
+		sr = null;
+		bridge = null;
+		servletMapping = "";
 		httpServiceTracker.close();
 		httpServiceTracker = null;
-		log.info("Bundle stopped sucessfully");
 	}
-
-	private class HttpServiceTracker extends ServiceTracker {
-
-		public HttpServiceTracker(BundleContext context) {
-			super(context, HttpService.class.getName(), null);
-		}
-
-		public Object addingService(ServiceReference reference) {
-			HttpService httpService = (HttpService) context.getService(reference);
-			try {
-				
-				//TODO We need to get a reference to the ServletContext before starting RESTEasy
-				// however, the way I'm getting it seems odd.
-				ServletContextInterceptor interceptor = new ServletContextInterceptor();
-				httpService.registerServlet("/contextinterceptor", interceptor, null, null);
-				ServletContext servletContext = interceptor.getServletContext();
-								
-				log.info("Starting RESTEasy framework");
-				
-				//TODO Learn if annotation scanning can work inside bundles.
-				String scan = servletContext.getInitParameter("resteasy.scan");
-				if (scan != null && scan.equals("true")) {
-					log.error("Unsupported RESTEasy configuration into OSGi framework. Please remove it");
+	
+	/**
+	 * Listen to service Registrations/Unregistrations and call addSingletons, removeSingletons for all services found.
+	 */
+	public void serviceChanged(ServiceEvent event) {
+		ServiceReference sr = event.getServiceReference();
+		switch(event.getType()) {
+			case ServiceEvent.REGISTERED: 
+				try {
+					addSingletons(context.getService(sr));
+					context.ungetService(sr);
+					//if (!addSingletons(context.getService(sr))) {
+					//	context.ungetService(sr);
+					//}
+				} catch (Exception e) {
+					e.printStackTrace();
 				}
-				
-				servletMapping = servletContext.getInitParameter("resteasy.servlet.mapping.prefix");
-				bridge = new ResteasyServlet();
-				httpService.registerServlet(servletMapping, bridge, null, null);
-				log.info("RESTEasy Framework started on " + servletMapping);
-				
-				httpService.unregister("/contextinterceptor");
-				interceptor.destroy();
-				interceptor = null;
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-			return httpService;
-		}		
-		
-		public void removedService(ServiceReference reference, Object service) {
-			HttpService httpService = (HttpService) service;
-			httpService.unregister(servletMapping);
-			bridge = null;
-			super.removedService(reference, service);
+			break;
+			
+			case ServiceEvent.UNREGISTERING:
+				try {
+					//if (!removeSingletons(context.getService(sr))) {
+					//	context.ungetService(sr);
+					//}
+					removeSingletons(context.getService(sr));
+					context.ungetService(sr);
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			break;
 		}
+	}
+	
+	/**
+	 * Add a service as a singleton into the RESTEasy service if the service class is annotated with 
+	 * javax.ws.rs.Path which means the the service is a REST Resource class. Return true if
+	 * the class is annotated and added from the RESTEasy service.
+	 * @param service
+	 * @return
+	 */
+	private boolean addSingletons(Object service) {
+		if (service != null && service.getClass().isAnnotationPresent(Path.class)) {
+			System.out.println("Adicionando singleton " + service.getClass().getName());
+			this.service.addSingletonResource(service);
+			return true;
+		}
+		return false;
+	}
+	
+	/**
+	 * Remove a service from the RESTEasy service if the service class is annotated with 
+	 * javax.ws.rs.Path which means the the service is a REST Resource class. Return true if
+	 * the class is annotated and removed from the RESTEasy service.
+	 * @param service
+	 * @return
+	 */
+	private boolean removeSingletons(Object service) {
+		if (service != null && service.getClass().isAnnotationPresent(Path.class)) {
+			System.out.println("Removendo singleton " + service.getClass().getName());
+			this.service.removeSingletonResource(service.getClass());
+			return true;
+		}
+		return false;
 	}
 }
