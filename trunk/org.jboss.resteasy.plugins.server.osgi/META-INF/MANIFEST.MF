@@ -6,6 +6,7 @@ Bundle-Version: 1.0.0
 Bundle-Activator: org.jboss.resteasy.plugins.server.osgi.internal.Activator
 Import-Package: javax.servlet,
  javax.servlet.http,
+ javax.ws.rs,
  org.apache.log4j,
  org.jboss.resteasy.core,
  org.jboss.resteasy.plugins.server.servlet,
