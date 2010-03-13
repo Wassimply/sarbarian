@@ -2,6 +2,7 @@ package org.jboss.resteasy.plugins.server.osgi;
 
 import org.jboss.resteasy.plugins.server.osgi.internal.ResteasyService;
 
+
 /**
  * IResteasyService provides interface to the internal RESTEasy implementation. This interface
  * will be called by bundles in order to register resources into RESTEasy.
