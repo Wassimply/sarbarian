@@ -3,7 +3,6 @@ package org.jboss.resteasy.plugins.server.osgi.internal;
 import javax.servlet.ServletContext;
 import javax.ws.rs.Path;
 
-import org.apache.log4j.Logger;
 import org.jboss.resteasy.plugins.server.osgi.IResteasyService;
 import org.osgi.framework.BundleActivator;
 import org.osgi.framework.BundleContext;
@@ -14,6 +13,8 @@ import org.osgi.framework.ServiceReference;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.http.HttpService;
 import org.osgi.util.tracker.ServiceTracker;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * OSGi Activator class to start RESTEasy inside OSGi container binding into HttpService as servlet 
@@ -22,7 +23,7 @@ import org.osgi.util.tracker.ServiceTracker;
  */
 public class Activator implements BundleActivator, ServiceListener {
 
-	private static Logger log = Logger.getLogger(ResteasyService.class);
+	private static Logger log = LoggerFactory.getLogger(ResteasyService.class);
 	
 	private ServiceTracker httpServiceTracker;
 	private ServiceRegistration sr;
@@ -135,7 +136,7 @@ public class Activator implements BundleActivator, ServiceListener {
 	 */
 	private boolean addSingletons(Object service) {
 		if (service != null && service.getClass().isAnnotationPresent(Path.class)) {
-			System.out.println("Adicionando singleton " + service.getClass().getName());
+			log.info("Adding JAX-RS resource: " + service.getClass().getName());
 			this.service.addSingletonResource(service);
 			return true;
 		}
@@ -151,7 +152,7 @@ public class Activator implements BundleActivator, ServiceListener {
 	 */
 	private boolean removeSingletons(Object service) {
 		if (service != null && service.getClass().isAnnotationPresent(Path.class)) {
-			System.out.println("Removendo singleton " + service.getClass().getName());
+			log.info("Removing JAX-RS resource: " + service.getClass().getName());
 			this.service.removeSingletonResource(service.getClass());
 			return true;
 		}

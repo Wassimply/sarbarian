@@ -1,19 +1,19 @@
 Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
-Bundle-Name: RESTEasy OSGi plugin
+Bundle-Name: jBoss RESTEasy OSGi plugin
 Bundle-SymbolicName: org.jboss.resteasy.plugins.server.osgi
-Bundle-Version: 1.0.0
+Bundle-Version: 1.0.2
 Bundle-Activator: org.jboss.resteasy.plugins.server.osgi.internal.Activator
 Import-Package: javax.servlet,
  javax.servlet.http,
  javax.ws.rs,
- org.apache.log4j,
  org.jboss.resteasy.core,
  org.jboss.resteasy.plugins.server.servlet,
  org.jboss.resteasy.spi,
  org.osgi.framework;version="1.3.0",
  org.osgi.service.http;version="1.2.1",
- org.osgi.util.tracker
+ org.osgi.util.tracker,
+ org.slf4j
 Bundle-RequiredExecutionEnvironment: JavaSE-1.6
 Export-Package: org.jboss.resteasy.plugins.server.osgi
-Bundle-Vendor: Davi Baldin H. Tavares
+Bundle-Vendor: baldin@gmail.com
